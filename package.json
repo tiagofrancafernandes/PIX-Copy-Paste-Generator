@@ -14,6 +14,7 @@
         "express": "^4.19.2",
         "pinia": "^2.1.7",
         "qrcode-generator": "^1.4.4",
+        "vite": "8.1.3",
         "vue": "^3.4.21",
         "vue-router": "^4.3.0",
         "vue3-toastify": "^0.2.9"
