@@ -1,39 +1,91 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useReceivers } from '@/composables/useReceivers';
 import { usePixGenerator } from '@/composables/usePixGenerator';
 import ApiPreview from '@/components/ApiPreview.vue';
 import PixResult from '@/components/PixResult.vue';
 
 function validateAmountKey(event: KeyboardEvent) {
-  const allowedKeys = ['0','1','2','3','4','5','6','7','8','9','.','Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
-  if (event.ctrlKey || event.metaKey) {
-    return;
-  }
-  if (!allowedKeys.includes(event.key)) {
-    event.preventDefault();
-    return;
-  }
-  // Prevent multiple dots
-  if (event.key === '.' && (event.target as HTMLInputElement).value.includes('.')) {
-    event.preventDefault();
-  }
+    const allowedKeys = [
+        '0',
+        '1',
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+        '8',
+        '9',
+        '.',
+        'Backspace',
+        'Delete',
+        'ArrowLeft',
+        'ArrowRight',
+        'Tab',
+        'Home',
+        'End',
+    ];
+    if (event.ctrlKey || event.metaKey) {
+        return;
+    }
+    if (!allowedKeys.includes(event.key)) {
+        event.preventDefault();
+        return;
+    }
+    // Prevent multiple dots
+    if (event.key === '.' && (event.target as HTMLInputElement).value.includes('.')) {
+        event.preventDefault();
+    }
+}
+
+function cleanAndFormatValue(value: any): number {
+    value = Number(['number', 'string'].includes(typeof value) ? value : 0);
+
+    value = isNaN(value) ? 0 : value || 0;
+    // let cleaned = String(value || 0).replace(/[^0-9.]/g, '');
+    let cleaned = String(value || 0).replace(/[^0-9.]/g, '');
+
+    const parts = cleaned.split('.');
+
+    if (parts.length > 2) {
+        // Keep only first dot
+        cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    return Number(cleaned) || 0;
 }
 
 function onAmountInput(event: Event) {
-  const input = event.target as HTMLInputElement;
-  // Remove any non‑numeric characters except a single dot
-  let cleaned = input.value.replace(/[^0-9.]/g, '');
-  const parts = cleaned.split('.');
-  if (parts.length > 2) {
-    // Keep only first dot
-    cleaned = parts[0] + '.' + parts.slice(1).join('');
-  }
-  input.value = cleaned;
-  // Update the bound amount (v-model)
-  amount.value = cleaned ? Number(cleaned) : 0;
-  // Clear previous result if any
-  clearResult();
+    const input = event.target as HTMLInputElement;
+    // Remove any non‑numeric characters except a single dot
+    let cleaned = input.value.replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+        // Keep only first dot
+        cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+    input.value = cleaned;
+    // Update the bound amount (v-model)
+    amount.value = cleaned ? Number(cleaned) : 0;
+    // Clear previous result if any
+    clearResult();
+}
+
+function setAmountValue(value: any) {
+    value = !isNaN(Number(value)) ? Number(value) : 0;
+    // Remove any non‑numeric characters except a single dot
+    let cleaned = String(value).replace(/[^0-9.]/g, '');
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+        // Keep only first dot
+        cleaned = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    // Update the bound amount (v-model)
+    amount.value = cleaned ? Number(cleaned) : 0;
+    // Clear previous result if any
+    clearResult();
 }
 
 const { receivers, selectedReceiver, select } = useReceivers();
@@ -51,10 +103,68 @@ const canGenerate = computed(() => {
     return true;
 });
 
+const latestValues = ref<number[]>([]);
+const loadLatestValues = () => {
+    try {
+        const storedData = localStorage.getItem('latest_values') || '[]';
+        let _values = JSON.parse(storedData);
+
+        _values = (Array.isArray(_values) ? _values : latestValues.value)
+            .map(Number)
+            .filter((item) => !isNaN(item) && item > 1)
+            .map((item: number | string) => Number(item).toFixed(2));
+
+        const uniqueValues: number[] = [...new Set(_values as number[])];
+
+        latestValues.value = uniqueValues.slice(-5);
+    } catch (e) {
+        console.error('Failed to parse latest values:', e);
+    }
+};
+const pushToLatestValues = (value: any) => {
+    value = cleanAndFormatValue(value);
+    if (!value || value < 1) {
+        return;
+    }
+
+    let _latestValues = latestValues.value;
+
+    _latestValues = _latestValues
+        .map(Number)
+        .filter((item) => !isNaN(item) && item > 1)
+        .map((item: number | string) => parseFloat(item as any))
+        .filter(Boolean);
+
+    // const uniqueValues = [...new Set(_latestValues)];
+
+    const uniqueValues = [...new Set([value, ..._latestValues])];
+
+    latestValues.value = [...new Set([value, ..._latestValues.slice(0, _latestValues.includes(value) ? 5 : 4)])];
+
+    try {
+        localStorage.setItem('latest_values', JSON.stringify(latestValues.value));
+    } catch (error) {
+        console.error(error);
+    }
+};
+
+const formatedLatestValues = computed(() => {
+    let _latestValues = latestValues.value
+        .map(Number)
+        .filter((item) => !isNaN(item) && item > 1)
+        .map((item: number | string) => Number(item).toFixed(2));
+
+    const uniqueValues = [...new Set(_latestValues)];
+
+    return uniqueValues.slice(-5);
+});
+
 async function handleGenerate() {
     if (!selectedReceiver.value) {
         return;
     }
+
+    pushToLatestValues(amount.value);
 
     await generate(selectedReceiver.value);
 }
@@ -65,6 +175,10 @@ function handleSelectChange(event: Event) {
     select(target.value || null);
     clearResult();
 }
+
+onMounted(async () => {
+    loadLatestValues();
+});
 </script>
 
 <template>
@@ -116,7 +230,9 @@ function handleSelectChange(event: Event) {
                     >
                         <option value="" disabled>-- Select a receiver --</option>
                         <option v-for="r in receivers" :key="r.id" :value="r.id">
-                            {{ String(r?.pixKey).trim()?.slice(0, 8) + '...' }} {{ r.receiverName }} ({{ r.receiverCityName }})
+                            {{ String(r?.pixKey).trim()?.slice(0, 8) + '...' }} {{ r.receiverName }} ({{
+                                r.receiverCityName
+                            }})
                         </option>
                     </select>
                 </div>
@@ -167,6 +283,22 @@ function handleSelectChange(event: Event) {
                         />
                     </div>
                     <p class="text-[10px] text-slate-400">Minimum payment value is R$ 1.00</p>
+                    <div class="w-full flex flex-col" v-if="latestValues?.length">
+                        <p class="flex-1 text-xs text-slate-400">Latest values</p>
+                        <div
+                            class="flex gap-2 overflow-x-auto whitespace-nowrap pb-2 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200"
+                        >
+                            <template v-for="(dataItem, dataItemIndex) in formatedLatestValues" :key="dataItemIndex">
+                                <button
+                                    class="inline-block bg-gray-400/30 hover:bg-gray-400/50 rounded-md text-gray-600 p-2 py-1 text-xs"
+                                    type="button"
+                                    @click.prevent="setAmountValue(Number(dataItem))"
+                                >
+                                    R$ {{ dataItem }}
+                                </button>
+                            </template>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Action Button -->
