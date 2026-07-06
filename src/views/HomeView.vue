@@ -5,6 +5,37 @@ import { usePixGenerator } from '@/composables/usePixGenerator';
 import ApiPreview from '@/components/ApiPreview.vue';
 import PixResult from '@/components/PixResult.vue';
 
+function validateAmountKey(event: KeyboardEvent) {
+  const allowedKeys = ['0','1','2','3','4','5','6','7','8','9','.','Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'];
+  if (event.ctrlKey || event.metaKey) {
+    return;
+  }
+  if (!allowedKeys.includes(event.key)) {
+    event.preventDefault();
+    return;
+  }
+  // Prevent multiple dots
+  if (event.key === '.' && (event.target as HTMLInputElement).value.includes('.')) {
+    event.preventDefault();
+  }
+}
+
+function onAmountInput(event: Event) {
+  const input = event.target as HTMLInputElement;
+  // Remove any non‑numeric characters except a single dot
+  let cleaned = input.value.replace(/[^0-9.]/g, '');
+  const parts = cleaned.split('.');
+  if (parts.length > 2) {
+    // Keep only first dot
+    cleaned = parts[0] + '.' + parts.slice(1).join('');
+  }
+  input.value = cleaned;
+  // Update the bound amount (v-model)
+  amount.value = cleaned ? Number(cleaned) : 0;
+  // Clear previous result if any
+  clearResult();
+}
+
 const { receivers, selectedReceiver, select } = useReceivers();
 const { amount, amountInCents, isGenerating, generatedResult, generate, clearResult } = usePixGenerator();
 
@@ -125,12 +156,13 @@ function handleSelectChange(event: Event) {
                         </span>
                         <input
                             id="amountInput"
-                            type="number"
+                            type="text"
                             step="0.01"
                             min="1.00"
                             placeholder="0.00"
                             v-model.number="amount"
-                            @input="clearResult"
+                            @keydown="validateAmountKey"
+                            @input="onAmountInput"
                             class="w-full border border-slate-200 rounded-r-md px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-0 focus:ring-primary-500 focus:border-primary-500"
                         />
                     </div>
