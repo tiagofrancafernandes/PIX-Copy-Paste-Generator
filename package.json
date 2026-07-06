@@ -33,5 +33,6 @@
         "typescript": "^5.3.3",
         "vite-plugin-vue-devtools": "8.1.5",
         "vue-tsc": "^2.0.6"
-    }
+    },
+    "packageManager": "pnpm@10.20.0"
 }
